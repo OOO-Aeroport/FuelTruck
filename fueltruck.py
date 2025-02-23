@@ -23,6 +23,7 @@ class FuelTruck:
     def __init__(self, nomer, place_nomer, volume_plane, order_no): # Конструктор класса: plane_place - место самолета; volume_plane - объем бака самолета; order_no - номер заказа
        self.new_mission(nomer, place_nomer, volume_plane, order_no)
 
+
     def new_mission(self, nomer, place_nomer, volume_plane, order_no): # Новая миссия. Обнуление переменных и прием параметров заказа.
         self.nomer = nomer                         # Номер топливозаправщика как строка '1'. Это нужно для знания к какому бензовозу обращаются
         self.busy = 1                              # Занят ли топливозаправщик (при создании занят)
@@ -38,6 +39,7 @@ class FuelTruck:
 
         self.thread = threading.Thread(target=self.do_mission) # Запускаем поток для выполнения задачи
         self.thread.start()   # Запускаем поток для выполнения задачи
+
 
     def do_mission(self):     # Метод выполняет работу заправщика
         while self.busy == 1: # Цикл до тех пор, пока бензовоз занят
@@ -68,28 +70,33 @@ class FuelTruck:
   
     def get_checkpoint_massiv(self): # Метод запрашивает маршрут до целевого объекта
         checkpoints = [] # Пустой массив чекпойнтов
+        url = f"{protokol}{dr}/point/{self.current_checkpoint}/{self.target_place}/{self.place_nomer}"
         # Запрос маршрута. Расшифровка URL:
         # dr - Запрос к диспетчеру руления
         # point - Находимся на точке
         # current_checkpoint - Номер текущей точки (число на сетке)
         # target_place - Название целевого объекта (самолет, заправка, гараж)
         # place_nomer - Номер площадки самолета
-        response = requests.get(f"{protokol}{dr}/point/{self.current_checkpoint}/{self.target_place}/{self.place_nomer}")
- 
+        print(f"Отправка: {url}")
+        response = requests.get(url) # Отправка запроса
+
         if response.status_code == 200: # Если ответ получен то
             checkpoints = response.json() # Преобразуем json в массив
         else:
-            print(f"Ошибка запроса пути: {response.status_code}")        
+            print(f"Ошибка запроса пути: {url} {response.status_code}")        
  
         return checkpoints
 
-    def ask_next_point(self): # 
+
+    def ask_next_point(self): # Запрос следующей точки
+        url = f"{protokol}{dr}/point/{self.current_checkpoint}/{self.next_checkpoint}"
         # Запрос на разрешение движения к контрольной точке. Расшифровка URL:
         # dr - Запрос к диспетчеру руления
         # point - Находимся на точке
         # current_checkpoint - Номер текущей точки (число на сетке)
         # next_checkpoint - Номер следующей точки (число на сетке)
-        response = requests.get(f"{protokol}{dr}/point/{self.current_checkpoint}/{self.next_checkpoint}")
+        print(f"Отправка: {url}")
+        response = requests.get(url) # Отправка запроса
 
         if response.status_code == 200: # Если ответ получен то
             if response.text.upper() == 'OK': # Латинские символы 
@@ -97,10 +104,11 @@ class FuelTruck:
             else:
                 return False
         else:
-            print(f"Ошибка запроса чекпойнта: {response.status_code}")        
+            print(f"Ошибка запроса чекпойнта: {url} {response.status_code}")
     
         return False
-    
+
+
     def moving_to_target_is_done(self): # Этот метод отвечает за движение от одного объекта до другого
         if self.current_pace == self.next_target_place: # Если текущее положение и цель одинаковы, то ничего не делаем
             return True
@@ -122,6 +130,7 @@ class FuelTruck:
   
         return True
 
+
     def set_next_target_place(self): 
         if self.full == 0 and self.total_loaded < self.volume_plane: # Если бензовоз пустой и самолет не заполнен едем на заправку
             self.target_place = gas
@@ -135,11 +144,25 @@ class FuelTruck:
         else: 
             self.target_place = garage  # На тот случай, если бензовоз полный и самолет заправлен, то едем в гараж
 
-    def send_success_to_plane(self):
-       _ = requests.get(f"{protokol}{fueltruck}/{plane}/{self.place_nomer}/success")
 
-    def send_mission_complete(self):
-       _ = requests.get(f"{protokol}{uno}/{fueltruck}/{self.order_no}/success")
+    def send_success_to_plane(self): # Метод отправки сообщения об успехе самолету
+        url = f"{protokol}{fueltruck}/{plane}/{self.place_nomer}/success"
+        print(f"Отправка: {url}")
+        response = requests.get(url)
+        if response.status_code == 200: # Если ответ получен то
+           print(f"Успешно: {url}")
+        else:
+           print(f"Ошибка отправки success: {url} {response.status_code}")
+
+
+    def send_mission_complete(self):  # Метод отправки сообщения о завершении миссии в УНО
+        url = f"{protokol}{uno}/{fueltruck}/{self.order_no}/success"
+        print(f"Отправка: {url}")
+        response = requests.get(url)
+        if response.status_code == 200: # Если ответ получен то
+           print(f"Успешно: {url}")
+        else:
+           print(f"Ошибка отправки в УНО: {url} {response.status_code}")
 
 
 def create_app():
@@ -154,22 +177,27 @@ def create_app():
 
     @app.route('/fueltruck/order/<int:order_no>/<int:volume_plane>/<int:place_nomer>/')
     def serve_order(order_no, volume_plane, place_nomer):                         # Процедура приема заказа
+        print(f"Прием заказа: {order_no}, {volume_plane}, {place_nomer}")
+
         if total_trucks < max_trucks: 
             total_trucks = total_trucks + 1                                       # Наращиваем количество грузовиков
             truck = FuelTruck(total_trucks, place_nomer, volume_plane, order_no)  # Создаем бензовоз. Там же в конструкторе создается поток
             fueltrucks[total_trucks] = truck                                      # Добавляем в массив
+            print(f"Создали новый бензовоз: {total_trucks} {order_no}, {volume_plane}, {place_nomer}")
         else:                                                                     # Все грузовики созданы
+            print(f"Ищем свободный бензовоз: {order_no}, {volume_plane}, {place_nomer}")
             index = 1                                                             # Начинаем индекс с единицы
             while index <= len(fueltrucks):                                       # Цикл по бензовозам
                 truck = fueltrucks[index]                                         # Достаем очередной грузовик
                 if truck.busy == 0:                                               # Если грузовик свободен
+                    print(f"Бензовоз найден: {index} {order_no}, {volume_plane}, {place_nomer}")
                     truck.new_mission(index, place_nomer, volume_plane, order_no) # Запуск новой миссии
-                    break                                                         # Выход из цикла
+                    print(f"Бензовоз запущен: {index} {order_no}, {volume_plane}, {place_nomer}")
+                    return "success"
  
                 index = index + 1                                                 # Наращиваем счетчик
-
-        return "success"
- 
+            print(f"Бензовоз не найден: {index} {order_no}, {volume_plane}, {place_nomer}")
+            return "default" 
     return app
 
 fueltrucks = defaultdict(FuelTruck)  # Массив бензовозов
