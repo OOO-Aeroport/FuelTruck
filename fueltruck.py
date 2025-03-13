@@ -211,8 +211,9 @@ class FuelTruck:
 
         if is_testmode: # Заглушка для режима тестирования
             return 
- 
+
         url = f"{protokol}{ip_plane}:{port}/{fueltruck}/{plane}/{self.plane_id}/success"
+
         dbg(f"Отправка: {url}")
         response = requests.get(url)
         if response.status_code == 200: # Если ответ получен то
@@ -227,7 +228,8 @@ class FuelTruck:
         if is_testmode: # Заглушка для режима тестирования
             return 
 
-        url = f"{protokol}{ip_uno}:{port}/{uno}/{fueltruck}/{self.order_no}/success"
+        url = f"{protokol}{ip_uno}:{port}/{uno}/api/v1/order/successReport/{self.order_no}/tanker-truck"
+
         dbg(f"Отправка: {url}")
         response = requests.get(url)
         if response.status_code == 200: # Если ответ получен то
