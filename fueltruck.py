@@ -7,15 +7,17 @@ from collections import defaultdict
 
 ip_plane = '1.1.1.1'    # IP адрес сервера самолета (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
 ip_uno = '1.1.1.1'      # IP адрес сервера УНО  (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
-ip_dr = '1.1.1.1'       # IP адрес сервера диспетчера руления (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
-is_testmode = False     # Флаг тестового режима
+ip_dr = '0.0.0.0'       # IP адрес сервера диспетчера руления (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
+is_testmode = True     # Флаг тестового режима
 is_debugmode = True     # Флаг вывода отладочных сообщений
+off_dispatcher = False  # Флаг отключения диспетчера движения
 host = '0.0.0.0'        # Сервер локальный
-port = '8001'           # Порт универсальный для всех серверов этого проекта
-tank_volume = 30        # Вместимость топливозаправщика (в тоннах)
-max_trucks = 20         # Максимальное количество топливозаправщиков
+port = '8080'           # Порт универсальный для всех серверов этого проекта
+tank_volume = 25000     # Вместимость топливозаправщика (в литрах)
+max_trucks = 3          # Максимальное количество топливозаправщиков
 total_trucks = 0        # Общее количество созданных топливозаправщиков
-garagepoint = 10        # Точка гаража. Эту цифру надо взять у разработчика GUI
+garagepoint = 297       # Точка гаража. Эту цифру надо взять у разработчика Диспетчера движения
+garage_free = True      # Индикатор свободного места у гаража
 protokol = "http://"    # Протокол
 gas = 'gas'             # Название в URL объекта "Заправка"
 plane = 'plane'         # Название в URL объекта "Самолет"
@@ -25,11 +27,11 @@ dr = "dr"               # Название в URL объекта "Диспетч
 uno = "uno"             # Название в URL объекта "Управление наземными операциями"
 
 class FuelTruck:
-    def __init__(self, nomer, place_nomer, volume_plane, order_no): # Конструктор класса: plane_place - место самолета; volume_plane - объем бака самолета; order_no - номер заказа
-       self.new_mission(nomer, place_nomer, volume_plane, order_no)
+    def __init__(self, nomer, plane_id, volume_plane, order_no): # Конструктор класса: plane_id - id самолета; volume_plane - объем бака самолета; order_no - номер заказа
+       self.new_mission(nomer, plane_id, volume_plane, order_no)
 
 
-    def new_mission(self, nomer, place_nomer, volume_plane, order_no): # Новая миссия. Обнуление переменных и прием параметров заказа.
+    def new_mission(self, nomer, plane_id, volume_plane, order_no): # Новая миссия. Обнуление переменных и прием параметров заказа.
         self.nomer = nomer                         # Номер топливозаправщика как строка '1'. Это нужно для знания к какому бензовозу обращаются
         dbg(f"Новая миссия бензовоза №{self.nomer}")
         self.busy = 1                              # Занят ли топливозаправщик (при создании занят)
@@ -38,7 +40,7 @@ class FuelTruck:
         self.next_target_place = gas               # Целевой объект (самолет, заправка, гараж). По умолчанию заправка
         self.current_checkpoint = garagepoint      # Текущая точка (число на сетке). По умолчанию заправщик создается в гараже
         self.next_checkpoint = 0                   # Следующий шаг чекпойнта в массиве
-        self.place_nomer = place_nomer             # Номер площадки самолета
+        self.plane_id = plane_id                   # ID самолета
         self.volume_plane = volume_plane           # Объем бака самолета
         self.total_loaded = 0                      # Сколько уже заполнено
         self.order_no = order_no                   # Номер заказа
@@ -48,8 +50,15 @@ class FuelTruck:
 
 
     def do_mission(self):     # Метод выполняет работу заправщика
-        while self.busy == 1: # Цикл до тех пор, пока бензовоз занят
-            time.sleep(1)     # Задержка в 1 секунду
+        global garage_free
+
+        if self.current_checkpoint == garagepoint:                      # Если текущая точка - гараж, то ставим отметку - Занято
+            garage_free = False                                         # Гараж занят 
+        else:
+            garage_free = True                                          # Гараж свободен 
+
+        while self.busy == 1:                                           # Цикл до тех пор, пока бензовоз занят
+            time.sleep(1)                                               # Задержка в 1 секунду
 
             if self.moving_to_target_is_done():                         # Если успешно перешли к цели (обновили поле current_place)
                 if self.current_place == plane:                         # Если бензовоз у самолета
@@ -78,17 +87,19 @@ class FuelTruck:
     def get_checkpoint_massiv(self): # Метод запрашивает маршрут до целевого объекта
         checkpoints = [] # Пустой массив чекпойнтов
 
-        if is_testmode: # Заглушка для режима тестирования
+        if is_testmode or off_dispatcher: # Заглушка для режима тестирования
             checkpoints = [1, 2, 3, 4, 5]
             return checkpoints
-
-        url = f"{protokol}{ip_dr}:{port}/{dr}/point/{self.current_checkpoint}/{self.next_target_place}/{self.place_nomer}"
+       
+        if self.next_target_place == plane:
+            url = f"{protokol}{ip_dr}:{port}/{self.next_target_place}/{self.current_checkpoint}/{self.plane_id}"
+        else:
+            url = f"{protokol}{ip_dr}:{port}/{self.current_checkpoint}/{self.next_target_place}"
+ 
         # Запрос маршрута. Расшифровка URL:
-        # dr - Запрос к диспетчеру руления
-        # point - Находимся на точке
         # current_checkpoint - Номер текущей точки (число на сетке)
         # next_target_place - Название целевого объекта (самолет, заправка, гараж)
-        # place_nomer - Номер площадки самолета
+        # plane_id - Номер площадки самолета
         dbg(f"Отправка: {url}")
         response = requests.get(url) # Отправка запроса
 
@@ -101,20 +112,26 @@ class FuelTruck:
 
 
     def ask_next_point(self): # Запрос следующей точки
-        if is_testmode: # Заглушка для режима тестирования
+        global garage_free
+
+        if is_testmode or off_dispatcher: # Заглушка для режима тестирования
+            garage_free = True
             return True
 
-        url = f"{protokol}{ip_dr}:{port}/{dr}/point/{self.current_checkpoint}/{self.next_checkpoint}"
+        url = f"{protokol}{ip_dr}:{port}/point/{self.current_checkpoint}/{self.next_checkpoint}"
         # Запрос на разрешение движения к контрольной точке. Расшифровка URL:
         # dr - Запрос к диспетчеру руления
         # point - Находимся на точке
         # current_checkpoint - Номер текущей точки (число на сетке)
         # next_checkpoint - Номер следующей точки (число на сетке)
         dbg(f"Отправка: {url}")
-        response = requests.get(url) # Отправка запроса
+        response = requests.get(url)                       # Отправка запроса
 
-        if response.status_code == 200: # Если ответ получен то
-            if response.text.upper() == 'OK': # Латинские символы 
+        if response.status_code == 200:                    # Если ответ получен то
+            if response.text == 'true':                    # Латинские символы
+                if self.current_checkpoint == garagepoint: # Если текущей была точка гаража
+                    garage_free = True                     # Освобождаем точку гаража
+
                 return True
             else:
                 return False
@@ -195,7 +212,7 @@ class FuelTruck:
         if is_testmode: # Заглушка для режима тестирования
             return 
  
-        url = f"{protokol}{ip_plane}:{port}/{fueltruck}/{plane}/{self.place_nomer}/success"
+        url = f"{protokol}{ip_plane}:{port}/{fueltruck}/{plane}/{self.plane_id}/success"
         dbg(f"Отправка: {url}")
         response = requests.get(url)
         if response.status_code == 200: # Если ответ получен то
@@ -227,33 +244,52 @@ def create_app():
     # order - Признак того, что это заказ
     # order_no - Номер заказа
     # volume_plane - Объем бака ксамолета
-    # place_nomer - Номер площадки самолета
+    # plane_id - Номер площадки самолета
 
-    @app.route('/fueltruck/order/<int:order_no>/<int:volume_plane>/<int:place_nomer>')
-    def serve_order(order_no, volume_plane, place_nomer):                         # Процедура приема заказа
-        dbg(f"Прием заказа: {order_no}, {volume_plane}, {place_nomer}")
+    @app.route('/fueltruck/order/<int:order_no>/<int:volume_plane>/<int:plane_id>')
+    def serve_order(order_no, volume_plane, plane_id):                            # Процедура приема заказа
+        dbg(f"Прием заказа: {order_no}, {volume_plane}, {plane_id}")
         global total_trucks 
 
         if total_trucks < max_trucks:                                             # Если не все бензовозы созданы
+            wait = 0
+            while not garage_free and wait <= 10000:                              # Включаем режим ожидания освобождения точки гаража
+                time.sleep(0.1)
+                wait = wait + 1
+
             total_trucks = total_trucks + 1                                       # Наращиваем количество бензовозов
-            truck = FuelTruck(total_trucks, place_nomer, volume_plane, order_no)  # Создаем бензовоз. Там же в конструкторе создается поток
+            truck = FuelTruck(total_trucks, plane_id, volume_plane, order_no)     # Создаем бензовоз. Там же в конструкторе создается поток
             fueltrucks[total_trucks] = truck                                      # Добавляем в массив
-            dbg(f"Создали новый бензовоз: {total_trucks} {order_no}, {volume_plane}, {place_nomer}")
+            dbg(f"Создали новый бензовоз: {total_trucks} {order_no}, {volume_plane}, {plane_id}")
         else:                                                                     # Все бензовозы созданы
-            dbg(f"Ищем свободный бензовоз: {order_no}, {volume_plane}, {place_nomer}")
-            index = 1                                                             # Начинаем индекс с единицы
-            while index <= len(fueltrucks):                                       # Цикл по бензовозам
-                truck = fueltrucks[index]                                         # Достаем очередной бензовоз
-                if truck.busy == 0:                                               # Если бензовоз свободен
-                    dbg(f"Бензовоз №{index} найден: {order_no}, {volume_plane}, {place_nomer}")
-                    truck.new_mission(index, place_nomer, volume_plane, order_no) # Запуск новой миссии
-                    dbg(f"Бензовоз №{index} запущен: {order_no}, {volume_plane}, {place_nomer}")
-                    return "success"
+            dbg(f"Ищем свободный бензовоз: {order_no}, {volume_plane}, {plane_id}")
+
+            cnt = 0
+
+            while cnt <= 10000:                                                       # Цикл поиска свободного бензовоза. Один миллион попыток
+                time.sleep(0.1)                                                       # Задержка 0.1
+                index = 1                                                             # Начинаем индекс с единицы
+
+                while index <= len(fueltrucks):                                       # Цикл по бензовозам
+                    truck = fueltrucks[index]                                         # Достаем очередной бензовоз
+                    if truck.busy == 0:                                               # Если бензовоз свободен
+                        dbg(f"Бензовоз №{index} найден: {order_no}, {volume_plane}, {plane_id}")
+                        wait = 0
+                        while not garage_free and wait <= 10000:                      # Включаем режим ожидания освобождения точки гаража
+                            time.sleep(0.1)
+                            wait = wait + 1
+
+                        truck.new_mission(index, plane_id, volume_plane, order_no)    # Запуск новой миссии
+                        dbg(f"Бензовоз №{index} запущен: {order_no}, {volume_plane}, {plane_id}")
+                        return "success"
  
-                index = index + 1                                                 # Наращиваем счетчик
-            dbg(f"Бензовоз не найден: {order_no}, {volume_plane}, {place_nomer}")
+                    index = index + 1                                                 # Наращиваем счетчик
+                # Конец цикла по index
+                cnt = cnt + 1
+            # Конец цикла по cnt
+            dbg(f"Бензовоз не найден: {order_no}, {volume_plane}, {plane_id}, попыток {cnt}")
             return "Заказ не выполнен: Бензовоз не найден" 
-        return f"Заказ выполнен: {order_no}, {volume_plane}, {place_nomer}"
+        return f"Заказ выполнен: {order_no}, {volume_plane}, {plane_id}"
     return app
 
 def dbg(word): # Процедура выводит в консоль отладочные сообщения
