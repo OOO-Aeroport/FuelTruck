@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="5"> <!-- Автоматическое обновление каждые 5 секунд -->
+    <title>Показатели топливозаправщиков</title>
+    <style>
+        /* Стили для разделения на два фрейма */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh; /* Занимает всю высоту окна браузера */
+        }
+        .top-frame {
+            flex: 1; /* Верхний фрейм занимает 50% высоты */
+            padding: 10px;
+            border-bottom: 2px solid #ccc; /* Граница между фреймами */
+        }
+        .bottom-frame {
+            flex: 1; /* Нижний фрейм занимает 50% высоты */
+            padding: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 100%; /* Занимает всю высоту нижнего фрейма */
+            resize: none; /* Запрет изменения размера */
+            background-color: #f9f9f9; /* Светлый фон */
+            border: 1px solid #ccc; /* Граница текстового поля */
+            padding: 10px;
+            box-sizing: border-box; /* Учитываем padding в размерах */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Верхний фрейм -->
+        <div class="top-frame">
+            <h3>Показатели бензовозов</h3>
+            <form method="POST">
+                <label for="max_trucks">Максимальное количество бензовозов:</label><br>
+                <input type="number" id="max_trucks" name="max_trucks" value="{{ max_trucks }}"><br><br>
+
+                <label for="frequency">Частота шага бензовоза в секундах:</label><br>
+                <input type="number" id="frequency" name="frequency" value="{{ frequency }}"><br><br>
+
+                <label for="tank_volume">Емкость бензовоза в литрах:</label><br>
+                <input type="number" id="tank_volume" name="tank_volume" value="{{ tank_volume }}"><br><br>
+                
+                <input type="submit" value="Обновить"><br><br>
+
+                <label for="total_trucks">Общее количество созданных бензовозов:</label><br>
+                <input type="number" id="total_trucks" name="total_trucks" value="{{ total_trucks }}" readonly><br><br>
+
+                <label for="total_orders">Общее количество выполненных заказов:</label><br>
+                <input type="number" id="total_orders" name="total_orders" value="{{ total_orders }}" readonly><br><br>
+            </form>
+        </div>
+
+        <!-- Нижний фрейм -->
+        <div class="bottom-frame">
+            <label for="loginfo">Информация:</label><br>
+            <textarea id="loginfo" readonly>{{ loginfo }}</textarea>
+        </div>
+    </div>
+</body>
+</html>
