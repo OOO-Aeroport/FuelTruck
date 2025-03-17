@@ -25,11 +25,11 @@ garage = 'garage'          # Название в URL объекта "Гараж"
 fueltruck = 'fueltruck'    # Название в URL объекта "Гараж"
 dr = "dr"                  # Название в URL объекта "Диспетчер руления"
 uno = "uno"                # Название в URL объекта "Управление наземными операциями"
-frequency = 1              # Частота хождения по маршруту в секундах
+frequency = 0.2            # Частота хождения по маршруту в секундах
 loginfo = 'Лог:'           # Глобальная переменная, хранящая последнее сообщение
 total_orders = 0           # Общее количество выполненных заказов
 orders = []                # Массив заказов
-tries_request = 1000       # Количество попыток перезапроса
+tries_request = 10       # Количество попыток перезапроса
 fueltrucks = []            # Массив бензовозов
 
 class FuelTruck:
@@ -74,9 +74,9 @@ class FuelTruck:
                         self.send_mission_complete()                    # Отправляем сообщение в УНО - миссия завершена
 
                 elif self.current_place == garage and self.total_loaded >= self.volume_plane: # Если бензовоз в гараже и самолет заправлен
-                    self.busy = 0                                       # Освобождаем грузовик для выхода из цикла
-                    wlg(f"Освобождаем бензовоз: {self.nomer}")
                     self.free_fueltruck()                               # Шлем диспетчеру движения сообщение о самоликвидации
+                    self.busy = 0                                       # Освобождаем грузовик для выхода из цикла
+                    wlg(f"Освобождили бензовоз: {self.nomer}")
 
                 elif self.current_place == gas:                         # Если бензовоз у заправки
                     if self.volume_plane >= tank_volume:                # Если емкость самолета бльше бензовоза
@@ -87,14 +87,14 @@ class FuelTruck:
             self.set_next_target_place()                                # Назначаем новый целевой объект (обновляем поле next_target_place)
 
     def free_fueltruck(self):        # Метод отправляет уведомление диспетчеру движения о самоликвидации
-        url = f"{protokol}{ip_dr}:{port}/dispatcher/fueltruck/free"
+        url = f"{protokol}{ip_dr}:{port}/dispatcher/garage/fueltruck/free/{self.current_checkpoint}"
         wlg(f"Отправка диспетчеру сообщения об особождении бензовоза {self.nomer}: {url}")
 
         if is_dispatcher:            # Заглушка для режима тестирования.
             wlg(f"Заглушка. Бензовоз {self.nomer} свободен")
             return
 
-        response = requests.get(url) # Отправка запроса
+        response = requests.delete(url) # Отправка запроса
 
         if response.status_code == 200: # Если ответ получен то
             wlg(f"Бензовоз {self.nomer} свободен")
