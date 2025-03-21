@@ -5,17 +5,19 @@ from flask import Flask, render_template, request
 import requests
 from collections import defaultdict
 
-ip_plane = '192.168.35.22' # IP адрес сервера самолета (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
-ip_uno = '192.168.35.125'  # IP адрес сервера УНО  (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
-ip_dr = '26.21.3.228'      # IP адрес сервера диспетчера руления (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
+ip_tablo = '26.228.200.110'   # IP адрес табло
+ip_plane = '26.125.155.211'   # IP адрес сервера самолета (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
+ip_uno = '26.53.143.176'     # IP адрес сервера УНО  (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
+ip_dr = '26.34.23.177'       # IP адрес сервера диспетчера руления (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
 is_debugmode = True        # Флаг вывода отладочных сообщений
-is_plane = True            # Имитатор самолёта
-is_dispatcher = True       # Имитатор диспетчера движения
-is_uno = True              # Имитатор УНО
+is_plane = False           # Имитатор самолёта
+is_dispatcher = False       # Имитатор диспетчера движения
+is_uno = False             # Имитатор УНО
+is_tablo = False           # табло заглушка
 host = '0.0.0.0'           # Сервер локальныйr
 port = '5555'              # Порт универсальный для всех серверов этого проекта
 tank_volume = 10000        # Вместимость топливозаправщика (в литрах)
-max_trucks = 4             # Максимальное количество топливозаправщиков
+max_trucks = 3             # Максимальное количество топливозаправщиков
 total_trucks = 0           # Общее количество созданных топливозаправщиков
 garagepoint = 300          # Точка гаража. Эту цифру надо взять у разработчика Диспетчера движения
 protokol = "http://"       # Протокол
@@ -25,11 +27,11 @@ garage = 'garage'          # Название в URL объекта "Гараж"
 fueltruck = 'fueltruck'    # Название в URL объекта "Гараж"
 dr = "dr"                  # Название в URL объекта "Диспетчер руления"
 uno = "uno"                # Название в URL объекта "Управление наземными операциями"
-frequency = 0.2            # Частота хождения по маршруту в секундах
+frequency = 0.5            # Частота хождения по маршруту в секундах
 loginfo = 'Лог:'           # Глобальная переменная, хранящая последнее сообщение
 total_orders = 0           # Общее количество выполненных заказов
 orders = []                # Массив заказов
-tries_request = 10       # Количество попыток перезапроса
+tries_request = 100        # Количество попыток перезапроса
 fueltrucks = []            # Массив бензовозов
 
 class FuelTruck:
@@ -57,7 +59,7 @@ class FuelTruck:
 
     def do_mission(self):     # Метод выполняет работу заправщика
         while self.busy == 1:                                           # Цикл до тех пор, пока бензовоз занят
-            time.sleep(frequency)                                       # Задержка в 1 секунду
+            #time.sleep(frequency)                                       # Задержка в 1 секунду
 
             if self.moving_to_target_is_done():                         # Если успешно перешли к цели (обновили поле current_place)
                 if self.current_place == plane:                         # Если бензовоз у самолета
@@ -87,7 +89,7 @@ class FuelTruck:
             self.set_next_target_place()                                # Назначаем новый целевой объект (обновляем поле next_target_place)
 
     def free_fueltruck(self):        # Метод отправляет уведомление диспетчеру движения о самоликвидации
-        url = f"{protokol}{ip_dr}:{port}/dispatcher/garage/fueltruck/free/{self.current_checkpoint}"
+        url = f"{protokol}{ip_dr}:{port}/dispatcher/garage/free/{self.current_checkpoint}"
         wlg(f"Отправка диспетчеру сообщения об особождении бензовоза {self.nomer}: {url}")
 
         if is_dispatcher:            # Заглушка для режима тестирования.
@@ -109,11 +111,13 @@ class FuelTruck:
         cnt = 0 # Попытка
 
         while cnt <= tries_request: # Цикл запроса пути до цели
-            time.sleep(frequency)
+            #time.sleep(frequency)
             cnt = cnt + 1
 
             if self.next_target_place == plane:
-                url = f"{protokol}{ip_dr}:{port}/dispatcher/{self.next_target_place}/{self.current_checkpoint}/{self.plane_id}"
+                url = f"{protokol}{ip_dr}:{port}/dispatcher/plane/fueltruck/{self.current_checkpoint}/{self.plane_id}"
+            elif self.current_place == plane and self.next_target_place == gas:
+                url = f"{protokol}{ip_dr}:{port}/dispatcher/plane/{self.current_checkpoint}/gas"
             else:
                 url = f"{protokol}{ip_dr}:{port}/dispatcher/{self.current_checkpoint}/{self.next_target_place}"
 
@@ -123,18 +127,23 @@ class FuelTruck:
                 checkpoints = [1, 2, 3]
                 wlg(f"Заглушка. Путь от {self.current_place} к {self.next_target_place} получен: точек {len(checkpoints)}")
                 return checkpoints
+            
 
             response = requests.get(url) # Отправка запроса
 
             if response.status_code == 200: # Если ответ получен то
                 checkpoints = response.json() # Преобразуем json в массив
                 wlg(f"Путь с массивом чекпойнтов получен: точек {len(checkpoints)}")
+                wlg(f"Точки маршрута: {checkpoints}")
                 return checkpoints
             else:
                 wlg(f"Ошибка запроса пути от {self.current_place} к {self.next_target_place}: {response.status_code}, адрес: {url}")
-
+                
         return checkpoints      
  
+    def delay(self):
+        _ = requests.get(f"{protokol}{ip_tablo}:{port}/dep-board/api/v1/time/timeout?timeout=40")
+        return
 
     def ask_next_point(self): # Запрос следующей точки
         if self.current_checkpoint == self.next_checkpoint: # Если чекпойнты совпадают, то и спрашивать не надо
@@ -144,7 +153,9 @@ class FuelTruck:
         cnt = 0 # Попытка
 
         while cnt <= tries_request:  # Цикл запроса чекпойнта
-            time.sleep(frequency)
+            if not is_tablo:
+                self.delay()           
+
             cnt = cnt + 1
 
             url = f"{protokol}{ip_dr}:{port}/dispatcher/point/{self.current_checkpoint}/{self.next_checkpoint}"
@@ -180,7 +191,7 @@ class FuelTruck:
 
         while True:                                                    # Цикл по количеству попыток. После 5 попыток запрашивается новый путь
             checkpoints = self.get_checkpoint_massiv()                 # Запрашиваем массив чекпойнтов до цели
-            index = 1                                                  # Предполагаем, что в массиве нулевой чекпойнт - это текущий, по этому начинаем с первого а не с нулевого
+            index = 0                                                  # Предполагаем, что в массиве нулевой чекпойнт - это текущий, по этому начинаем с первого а не с нулевого
             cnt_tries = 0                                              # Счетчик количества попыток пройти по маршруту
 
             while index < len(checkpoints):                            # Перебор чекпойнтов с прерыванием по количеству попыток
@@ -266,7 +277,7 @@ class FuelTruck:
             wlg(f"Заглушка: Уведомление в УНО о выполнении заказа {self.order_no} отправлено успешно") 
             return
 
-        response = requests.get(url)
+        response = requests.post(url)
  
         if response.status_code == 200: # Если ответ получен то
            wlg(f"Уведомление в УНО о выполнении заказа {self.order_no} отправлено успешно")
@@ -285,47 +296,47 @@ def create_app():
         global total_trucks, orders, fueltrucks
 
         if total_trucks < max_trucks:                                             # Если не все бензовозы созданы
-            orders.append(order_no)                                               # Если заказ не в работе то добавляем список в работе 
-            wait = 0
-            while not garage_free() and wait <= 10000:                            # Включаем режим ожидания освобождения точки гаража
-                time.sleep(frequency)
-                wait = wait + 1
+            if order_no not in orders:
+                orders.append(order_no)                                               # Если заказ не в работе то добавляем список в работе 
+                wait = 0
+                while not garage_free() and wait <= 100000:                            # Включаем режим ожидания освобождения точки гаража
+                    time.sleep(0.1)
+                    wait = wait + 1
 
-            total_trucks = total_trucks + 1                                       # Наращиваем количество бензовозов
-            truck = FuelTruck(total_trucks, plane_id, volume_plane, order_no)     # Создаем бензовоз. Там же в конструкторе создается поток
-            fueltrucks.append(truck)                                              # Добавляем в массив
-            wlg(f"Создали новый бензовоз: {len(fueltrucks)}. Заказ {order_no}. Объем {volume_plane}. ID самолета {plane_id}")
-        else:                                                                     # Все бензовозы созданы
-            wlg(f"Ищем свободный бензовоз: заказ {order_no}. Объем {volume_plane}, ID самолета {plane_id}")
+                total_trucks = total_trucks + 1                                       # Наращиваем количество бензовозов
+                truck = FuelTruck(total_trucks, plane_id, volume_plane, order_no)     # Создаем бензовоз. Там же в конструкторе создается поток
+                fueltrucks.append(truck)                                              # Добавляем в массив
+                wlg(f"Создали новый бензовоз: {len(fueltrucks)}. Заказ {order_no}. Объем {volume_plane}. ID самолета {plane_id}")
+        else:
+            if order_no not in orders:                                    # Проверяем, в работе ли заказ 
+                orders.append(order_no)                                   # Если заказ не в работе то добавляем список в работе                                                                
+                wlg(f"Ищем свободный бензовоз: заказ {order_no}. Объем {volume_plane}, ID самолета {plane_id}")
 
-            cnt = 0
+                cnt = 0
 
-            while cnt <= 100000:                                                      # Цикл поиска свободного бензовоза. Один миллион попыток
-                time.sleep(0.1)                                                       # Задержка 0.1
-                index = 0                                                             # Начинаем индекс с 0
+                while cnt <= 100000:                                                      # Цикл поиска свободного бензовоза. Один миллион попыток
+                    time.sleep(0.1)                                                       # Задержка 0.1
+                    index = 0                                                             # Начинаем индекс с 0
 
-                while index < len(fueltrucks):                                        # Цикл по бензовозам
-                    truck = fueltrucks[index]                                         # Достаем очередной бензовоз
-                    if truck.busy == 0:                                               # Если бензовоз свободен
-                        wlg(f"Бензовоз {index + 1} найден: Заказ {order_no}. Заказано {volume_plane} литров топлива. ID самолета {plane_id}")
-                        wait = 0
-                        while not garage_free() and wait <= 10000:                    # Включаем режим ожидания освобождения точки гаража
-                            time.sleep(frequency)
-                            wait = wait + 1
+                    while index < len(fueltrucks):                                        # Цикл по бензовозам
+                        truck = fueltrucks[index]                                         # Достаем очередной бензовоз
+                        if truck.busy == 0:                                               # Если бензовоз свободен
+                            wlg(f"Бензовоз {index + 1} найден: Заказ {order_no}. Заказано {volume_plane} литров топлива. ID самолета {plane_id}")
+                            wait = 0
+                            while not garage_free() and wait <= 100000:                    # Включаем режим ожидания освобождения точки гаража
+                                time.sleep(0.1)
+                                wait = wait + 1
 
-                        if order_no not in orders:                                    # Проверяем, в работе ли заказ
-                            orders.append(order_no)                                   # Если заказ не в работе то добавляем список в работе 
-                            truck.new_mission(index, plane_id, volume_plane, order_no)    # Запуск новой миссии
+                            truck.new_mission(index + 1, plane_id, volume_plane, order_no)    # Запуск новой миссии
                             wlg(f"Бензовоз {index + 1} запущен: Заказ {order_no}. Заказано {volume_plane} литров топлива. ID самолета {plane_id}")
-
-                        return "success"
- 
-                    index = index + 1                                                 # Наращиваем счетчик
-                # Конец цикла по index
-                cnt = cnt + 1
-            # Конец цикла по cnt
-            wlg(f"Бензовоз не найден: {order_no}, {volume_plane}, {plane_id}, попыток {cnt}")
-            return "Заказ не выполнен: Бензовоз не найден" 
+                            return "success"
+    
+                        index = index + 1                                                 # Наращиваем счетчик
+                    # Конец цикла по index
+                    cnt = cnt + 1
+                # Конец цикла по cnt
+                wlg(f"Бензовоз не найден: {order_no}, {volume_plane}, {plane_id}, попыток {cnt}")
+                return "Заказ не выполнен: Бензовоз не найден" 
         return f"Заказ {order_no} принят в работу. Заказано {volume_plane} литров топлива. ID самолета {plane_id}"
 
     @app.route('/gas', methods=['GET', 'POST'])
