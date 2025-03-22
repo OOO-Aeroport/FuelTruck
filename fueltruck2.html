@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="5"> <!-- Автоматическое обновление каждые 5 секунд -->
+    <meta http-equiv="refresh" content="6"> <!-- Автоматическое обновление каждые 6 секунд -->
     <title>Показатели топливозаправщиков</title>
     <style>
         /* Стили для разделения на два фрейма */
@@ -15,20 +15,39 @@
         .top-frame {
             flex: 1; /* Верхний фрейм занимает 50% высоты */
             padding: 10px;
-            border-bottom: 2px solid #ccc; /* Граница между фреймами */
+            border-bottom: 4px solid #ccc; /* Утолщенная граница между фреймами */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Тень для объема */
         }
         .bottom-frame {
             flex: 1; /* Нижний фрейм занимает 50% высоты */
             padding: 10px;
+            box-shadow: 0 -4px 6px rgba(0, 0, 0, 0.1); /* Тень для объема */
         }
         textarea {
             width: 100%;
             height: 100%; /* Занимает всю высоту нижнего фрейма */
             resize: none; /* Запрет изменения размера */
             background-color: #f9f9f9; /* Светлый фон */
-            border: 1px solid #ccc; /* Граница текстового поля */
+            border: 2px solid #ccc; /* Утолщенная граница текстового поля */
             padding: 10px;
             box-sizing: border-box; /* Учитываем padding в размерах */
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1); /* Внутренняя тень для объема */
+        }
+        input[type="number"], input[type="submit"] {
+            border: 2px solid #ccc; /* Утолщенная граница для полей ввода */
+            padding: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Тень для объема */
+        }
+        input[type="submit"] {
+            background-color: #4CAF50; /* Зеленый фон для кнопки */
+            color: white; /* Белый текст */
+            border: none; /* Убираем границу */
+            padding: 10px 20px; /* Увеличиваем отступы */
+            cursor: pointer; /* Курсор в виде указателя */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); /* Тень для объема */
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049; /* Темно-зеленый фон при наведении */
         }
     </style>
 </head>
@@ -41,13 +60,10 @@
                 <label for="max_trucks">Максимальное количество бензовозов:</label><br>
                 <input type="number" id="max_trucks" name="max_trucks" value="{{ max_trucks }}"><br><br>
 
-                <label for="frequency">Частота шага бензовоза в секундах:</label><br>
-                <input type="number" id="frequency" name="frequency" value="{{ frequency }}"><br><br>
-
                 <label for="tank_volume">Емкость бензовоза в литрах:</label><br>
                 <input type="number" id="tank_volume" name="tank_volume" value="{{ tank_volume }}"><br><br>
                 
-                <input type="submit" value="Обновить"><br><br>
+                <input type="submit" value="Сохранить"><br><br>
 
                 <label for="total_trucks">Общее количество созданных бензовозов:</label><br>
                 <input type="number" id="total_trucks" name="total_trucks" value="{{ total_trucks }}" readonly><br><br>

@@ -9,11 +9,11 @@ ip_tablo = '26.228.200.110'   # IP адрес табло
 ip_plane = '26.125.155.211'   # IP адрес сервера самолета (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
 ip_uno = '26.53.143.176'     # IP адрес сервера УНО  (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
 ip_dr = '26.34.23.177'       # IP адрес сервера диспетчера руления (ОБЯЗАТЕЛЬНО ЗАМЕНИТЬ НА РЕАЛЬНЫЙ)
+is_plane = True           # Имитатор самолёта
+is_dispatcher = True       # Имитатор диспетчера движения
+is_uno = True             # Имитатор УНО
+is_tablo = True           # табло заглушка
 is_debugmode = True        # Флаг вывода отладочных сообщений
-is_plane = False           # Имитатор самолёта
-is_dispatcher = False       # Имитатор диспетчера движения
-is_uno = False             # Имитатор УНО
-is_tablo = False           # табло заглушка
 host = '0.0.0.0'           # Сервер локальныйr
 port = '5555'              # Порт универсальный для всех серверов этого проекта
 tank_volume = 10000        # Вместимость топливозаправщика (в литрах)
@@ -141,7 +141,7 @@ class FuelTruck:
                 
         return checkpoints      
  
-    def delay(self):
+    def delay(self): # Процедура задержки вместо sleep
         _ = requests.get(f"{protokol}{ip_tablo}:{port}/dep-board/api/v1/time/timeout?timeout=40")
         return
 
@@ -160,7 +160,7 @@ class FuelTruck:
 
             url = f"{protokol}{ip_dr}:{port}/dispatcher/point/{self.current_checkpoint}/{self.next_checkpoint}"
 
-            wlg(f"Отправка запроса с чекпойнта {self.current_checkpoint} на чекпойнт {self.next_checkpoint}: {url}")
+            wlg(f"Отправка запроса с чекпойнта {self.current_checkpoint} на чекпойнт {self.next_checkpoint}")
 
             if is_dispatcher:                                  # Заглушка для режима тестирования
                 wlg(f"Заглушка: Переход с чекпойнта {self.current_checkpoint} на чекпойнт {self.next_checkpoint} разрешен")
@@ -307,7 +307,8 @@ def create_app():
                 truck = FuelTruck(total_trucks, plane_id, volume_plane, order_no)     # Создаем бензовоз. Там же в конструкторе создается поток
                 fueltrucks.append(truck)                                              # Добавляем в массив
                 wlg(f"Создали новый бензовоз: {len(fueltrucks)}. Заказ {order_no}. Объем {volume_plane}. ID самолета {plane_id}")
-        else:
+            # Конец условия если заказ не в списке orders
+        else:                                                             # Все грузовики заняты
             if order_no not in orders:                                    # Проверяем, в работе ли заказ 
                 orders.append(order_no)                                   # Если заказ не в работе то добавляем список в работе                                                                
                 wlg(f"Ищем свободный бензовоз: заказ {order_no}. Объем {volume_plane}, ID самолета {plane_id}")
@@ -335,8 +336,9 @@ def create_app():
                     # Конец цикла по index
                     cnt = cnt + 1
                 # Конец цикла по cnt
-                wlg(f"Бензовоз не найден: {order_no}, {volume_plane}, {plane_id}, попыток {cnt}")
-                return "Заказ не выполнен: Бензовоз не найден" 
+                wlg(f"Свободный бензовоз не найден: {order_no}, {volume_plane}, {plane_id}, попыток {cnt}")
+                return "Заказ не выполнен: Свободный бензовоз не найден"
+            # Конец условия если заказ не в списке orders
         return f"Заказ {order_no} принят в работу. Заказано {volume_plane} литров топлива. ID самолета {plane_id}"
 
     @app.route('/gas', methods=['GET', 'POST'])
@@ -346,13 +348,10 @@ def create_app():
         if request.method == 'POST':
             # Обновление переменных на основе данных формы
             max_trucks = int(request.form['max_trucks'])
-            #total_trucks = int(request.form['total_trucks'])
-            frequency = int(request.form['frequency'])
-            #loginfo = int(request.form['loginfo'])
             tank_volume = int(request.form['tank_volume'])
 
         # Отображение HTML-страницы с текущими значениями переменных
-        return render_template("fueltruck2.html", max_trucks=max_trucks, total_trucks=total_trucks, frequency=frequency, loginfo=loginfo, tank_volume=tank_volume, total_orders=total_orders)
+        return render_template("fueltruck2.html", max_trucks=max_trucks, total_trucks=total_trucks, loginfo=loginfo, tank_volume=tank_volume, total_orders=total_orders)
     return app
 
 
